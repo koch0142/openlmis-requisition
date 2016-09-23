@@ -3,11 +3,13 @@ package org.openlmis.requisition.service;
 import org.openlmis.requisition.domain.Requisition;
 import org.openlmis.requisition.domain.RequisitionLineItem;
 import org.openlmis.requisition.domain.RequisitionStatus;
+import org.openlmis.requisition.dto.ProcessingPeriodDto;
 import org.openlmis.requisition.dto.ProgramDto;
 import org.openlmis.requisition.dto.SupervisoryNodeDto;
 import org.openlmis.requisition.exception.RequisitionException;
 import org.openlmis.requisition.repository.RequisitionLineItemRepository;
 import org.openlmis.requisition.repository.RequisitionRepository;
+import org.openlmis.requisition.service.referencedata.PeriodReferenceDataService;
 import org.openlmis.requisition.service.referencedata.ProgramReferenceDataService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +43,9 @@ public class RequisitionService {
   @Autowired
   private ProgramReferenceDataService programReferenceDataService;
 
+  @Autowired
+  private PeriodReferenceDataService periodReferenceDataService;
+
   /**
    * Initiated given requisition if possible.
    *
@@ -50,7 +55,7 @@ public class RequisitionService {
    *      it is not possible to initialize a requisition.
    */
   public Requisition initiateRequisition(Requisition requisitionDto)
-                                          throws RequisitionException {
+        throws RequisitionException {
 
     if (requisitionDto == null) {
       throw new RequisitionException("Requisition cannot be initiated with null object");
@@ -61,11 +66,21 @@ public class RequisitionService {
 
       requisitionDto.getRequisitionLineItems().forEach(
           requisitionLineItem -> requisitionLineItemRepository.save(requisitionLineItem));
-      requisitionRepository.save(requisitionDto);
+
+      ProcessingPeriodDto processingPeriodDto =
+          periodReferenceDataService.findOne(requisitionDto.getProcessingPeriod());
+      ProgramDto programDto = programReferenceDataService.findOne(requisitionDto.getProgram());
+
+      if (programDto.getProcessingSchedule() == null) {
+        throw new RequisitionException("Program should be linked with a schedule");
+      } else if (programDto.getProcessingSchedule()
+            == processingPeriodDto.getProcessingSchedule()) {
+        requisitionRepository.save(requisitionDto);
+      }
 
     } else {
       throw new RequisitionException("Cannot initiate requisition."
-          + " Requisition with such parameters already exists");
+            + " Requisition with such parameters already exists");
     }
 
     return requisitionDto;
